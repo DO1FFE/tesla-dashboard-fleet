@@ -120,14 +120,14 @@ function updateSmsForm() {
     var hasNumber = cfg.phone_number && cfg.infobip_api_key && cfg.sms_enabled !== false;
     smsForm.toggle(!!hasNumber);
     var driveOnly = cfg.sms_drive_only !== false;
-    var parkedSince = parkStartTime ? Date.now() - parkStartTime : 0;
-    var allowWhileParked = parkedSince > 0 && parkedSince < 600000;
-    var enabled = hasNumber && (!driveOnly || (currentGear && currentGear !== 'P') || allowWhileParked);
+    var parked = !currentGear || currentGear === 'P';
+    var hasWa = cfg.whatsapp_from && cfg.whatsapp_template;
+    var enabled = hasNumber && (!driveOnly || !parked || hasWa);
     smsNameInput.prop('disabled', !enabled);
     smsInput.prop('disabled', !enabled);
     smsButton.prop('disabled', !enabled);
     if (!enabled) {
-        if (hasNumber && driveOnly && (!currentGear || currentGear === 'P')) {
+        if (hasNumber && driveOnly && parked && !hasWa) {
             smsStatus.text('Nachricht nur während der Fahrt erlaubt');
         } else {
             smsStatus.text('');
@@ -135,7 +135,11 @@ function updateSmsForm() {
         smsNameInput.val('');
         smsInput.val('');
     } else {
-        smsStatus.text('');
+        if (hasWa && driveOnly && parked) {
+            smsStatus.text('Sende via WhatsApp');
+        } else {
+            smsStatus.text('');
+        }
     }
 }
 
