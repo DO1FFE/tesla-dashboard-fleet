@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Tesla Dashboard zur Anzeige aktueller Fahrzeugdaten">
+    <meta name="keywords" content="Tesla, Dashboard, Fahrzeugdaten, Statistik, Karte, Elektroauto, Ladung, Stromverbrauch, Standort, Routenplanung, Fahrzeugstatus, Kilometerstand, Trip, Tesla Model S, Model 3, Model X, Model Y">
+    <title>Statistik</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    {% include 'analytics.html' %}
+    <style>
+        table { border-collapse: collapse; }
+        th, td { padding: 4px 8px; border: 1px solid #444; }
+    </style>
+</head>
+<body>
+    <h1>Statistik</h1>
+    {% set show_dash = config.get('menu-dashboard', True) %}
+    {% set show_stat = config.get('menu-statistik', True) %}
+    {% set show_hist = config.get('menu-history', True) %}
+    {% if config.get('page-menu', True) and (show_dash or show_stat or show_hist) %}
+    <nav id="page-menu">
+        {% if show_dash %}<a class="menu-button" href="/">Dashboard</a>{% endif %}
+        {% if show_stat %}<a class="menu-button" href="/statistik">Statistik</a>{% endif %}
+        {% if show_hist %}<a class="menu-button" href="/history">History</a>{% endif %}
+    </nav>
+    {% endif %}
+    <table>
+        <tr><th>Datum</th><th>Online %</th><th>Offline %</th><th>Asleep %</th><th>Gefahrene km</th><th>Höchste Geschwindigkeit (km/h)</th><th>Hinzugefügte Energie (kWh)</th></tr>
+        {% for row in rows %}
+        <tr>
+            <td>{{ row.date }}</td>
+            <td>{{ row.online }}</td>
+            <td>{{ row.offline }}</td>
+            <td>{{ row.asleep }}</td>
+            <td>{{ row.km }}</td>
+            <td>{{ row.speed }}</td>
+            <td>{{ row.energy }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

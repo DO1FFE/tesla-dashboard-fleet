@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Tesla Dashboard zur Anzeige aktueller Fahrzeugdaten">
+    <meta name="keywords" content="Tesla, Dashboard, Fahrzeugdaten, Statistik, Karte, Elektroauto, Ladung, Stromverbrauch, Standort, Routenplanung, Fahrzeugstatus, Kilometerstand, Trip, Tesla Model S, Model 3, Model X, Model Y">
+    <title>Tesla-Dashboard</title>
+    <script src="/static/js/jquery.min.js"></script>
+    <link rel="stylesheet" href="/static/css/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+    {% include 'analytics.html' %}
+    <script src="/static/js/leaflet.js"></script>
+    <script src="/static/js/leaflet.rotatedMarker.js"></script>
+    <script src="/static/js/Leaflet.Marker.SlideTo.js"></script>
+</head>
+<body>
+    <h2>Tesla-Dashboard V{{ version }}
+        <span id="header-right">
+            <span id="vehicle-info"></span>&nbsp;&nbsp;&nbsp;<span id="vehicle-status"></span>
+        </span>
+    </h2>
+    {% set show_dash = config.get('menu-dashboard', True) %}
+    {% set show_stat = config.get('menu-statistik', True) %}
+    {% set show_hist = config.get('menu-history', True) %}
+    {% if config.get('page-menu', True) and (show_dash or show_stat or show_hist) %}
+    <nav id="page-menu">
+        {% if show_dash %}<a class="menu-button" href="/">Dashboard</a>{% endif %}
+        {% if show_stat %}<a class="menu-button" href="/statistik">Statistik</a>{% endif %}
+        {% if show_hist %}<a class="menu-button" href="/history">History</a>{% endif %}
+    </nav>
+    {% endif %}
+    <div id="dashboard-content">
+        <label for="vehicle-select">Fahrzeug auswählen:</label>
+        <select id="vehicle-select"></select>
+        <div id="map-container">
+            <div id="map">
+                <div id="location-address"><div id="address-text"></div></div>
+                <div id="zoom-level"></div>
+            </div>
+            <div id="sidebar-right">
+                <div id="heater-indicator">
+                    <div id="front-defrost" title="Frontscheibenheizung"></div>
+                    <div id="rear-defrost" title="Heckscheibenheizung"></div>
+                    <div id="steering-heater" title="Lenkradheizung"></div>
+                    <div id="wiper-heater" title="Scheibenwischerheizung"></div>
+                    <div id="mirror-heater" title="Seitenspiegelheizung"></div>
+                    <div id="battery-heater" title="Batterieheizung"></div>
+                    <hr />
+                    <div id="seat-left" title="Sitzheizung Fahrer"></div>
+                    <div id="seat-right" title="Sitzheizung Beifahrer"></div>
+                    <div id="seat-rear-left" title="Sitzheizung hinten links"></div>
+                    <div id="seat-rear-center" title="Sitzheizung hinten Mitte"></div>
+                    <div id="seat-rear-right" title="Sitzheizung hinten rechts"></div>
+                    <hr />
+                </div>
+                <div id="announcement-box"></div>
+            </div>
+        </div>
+    <hr />
+    <div id="status-bar">
+        <div id="lock-container">
+            <div id="lock-status" title="Verriegelt">🔒</div>
+            <div id="user-presence" title="Niemand im Fahrzeug"></div>
+        </div>
+        <div id="gear-shift">
+            <div data-gear="P">P</div>
+            <div data-gear="R">R</div>
+            <div data-gear="N">N</div>
+            <div data-gear="D">D</div>
+        </div>
+        <div id="battery-indicator"></div>
+            <div id="speedometer">
+                <svg width="140" height="70" viewBox="0 -5 120 60">
+                    <path d="M10,50 A50,50 0 0,1 110,50" stroke="#ccc" stroke-width="12" fill="none"/>
+                    <g id="speedometer-ticks" stroke="#000" stroke-width="2">
+                        <!--0 km/h-->
+                        <line x1="10.0" y1="50.0" x2="5.0" y2="50.0" />
+                        <!--50 km/h-->
+                        <line x1="19.5" y1="20.6" x2="15.4" y2="17.7" />
+                        <!--100 km/h-->
+                        <line x1="44.5" y1="2.4" x2="43.0" y2="-2.4" />
+                        <!--150 km/h-->
+                        <line x1="75.5" y1="2.4" x2="77.0" y2="-2.4" />
+                        <!--200 km/h-->
+                        <line x1="100.5" y1="20.6" x2="104.6" y2="17.7" />
+                        <!--250 km/h-->
+                        <line x1="110.0" y1="50.0" x2="115.0" y2="50.0" />
+                    </g>
+                    <line id="speedometer-needle" x1="60" y1="50" x2="60" y2="-5" stroke="#d00" stroke-width="3" transform="rotate(-90 60 50)" />
+                </svg>
+                <div id="speed-value">0 km/h</div>
+                <div id="power-value" class="power">0 kW</div>
+                <div id="odometer-value" class="odometer">0 km</div>
+            </div>
+        <div id="thermometers">
+            <div class="thermometer">
+                <svg width="30" height="70" viewBox="0 0 30 60">
+                    <rect x="11" y="5" width="8" height="40" class="tube" />
+                    <rect id="inside-level" x="11" y="45" width="8" height="0" class="level" />
+                    <circle id="inside-bulb" cx="15" cy="50" r="9" class="bulb" />
+                </svg>
+                <div id="inside-temp-value" class="label">Innen: -- °C</div>
+                <div id="desired-temp" class="label" title="Wunschtemperatur">Wunsch: -- °C</div>
+            </div>
+            <div class="thermometer">
+                <svg width="30" height="70" viewBox="0 0 30 60">
+                    <rect x="11" y="5" width="8" height="40" class="tube" />
+                    <rect id="outside-level" x="11" y="45" width="8" height="0" class="level" />
+                    <circle id="outside-bulb" cx="15" cy="50" r="9" class="bulb" />
+                </svg>
+                <div id="outside-temp-value" class="label">Außen: -- °C</div>
+            </div>
+        </div>
+        <div id="climate-indicator">
+            <div id="climate-status" title="Klimaanlage aus">🚫</div>
+            <div id="climate-row">
+                <div id="climate-mode" title=""></div>
+                <div id="cabin-protection" title=""></div>
+            </div>
+            <div id="fan-status" title="Lüfterstufe">🌀 0</div>
+        </div>
+        <div id="openings-indicator">
+            <svg viewBox="0 0 100 200">
+                <path id="car-body" class="car-body" d="M20 20 Q30 10 50 10 Q70 10 80 20 V180 Q70 190 50 190 Q30 190 20 180 Z">
+                    <title>Fahrzeug</title>
+                </path>
+                <path id="frunk" class="part-closed" d="M30 25 L50 15 L70 25 V40 H30 Z">
+                    <title>Frunk</title>
+                </path>
+                <path id="trunk" class="part-closed" d="M30 165 H70 V175 L50 185 L30 175 Z">
+                    <title>Kofferraum</title>
+                </path>
+                <rect id="door-fl" class="part-closed" x="20" y="40" width="10" height="45">
+                    <title>T&#252;r vorne links</title>
+                </rect>
+                <rect id="door-fr" class="part-closed" x="70" y="40" width="10" height="45">
+                    <title>T&#252;r vorne rechts</title>
+                </rect>
+                <rect id="door-rl" class="part-closed" x="20" y="95" width="10" height="45">
+                    <title>T&#252;r hinten links</title>
+                </rect>
+                <rect id="door-rr" class="part-closed" x="70" y="95" width="10" height="45">
+                    <title>T&#252;r hinten rechts</title>
+                </rect>
+                <path id="window-fl" class="part-closed" d="M30 60 V45 L45 35 H50 V60 Z">
+                    <title>Fenster vorne links</title>
+                </path>
+                <path id="window-fr" class="part-closed" d="M50 60 V35 H55 L70 45 V60 Z">
+                    <title>Fenster vorne rechts</title>
+                </path>
+                <path id="window-rl" class="part-closed" d="M30 115 V100 L45 90 H50 V115 Z">
+                    <title>Fenster hinten links</title>
+                </path>
+                <path id="window-rr" class="part-closed" d="M50 115 V90 H55 L70 100 V115 Z">
+                    <title>Fenster hinten rechts</title>
+                </path>
+                <rect id="sunroof" class="part-closed" x="30" y="50" width="40" height="30">
+                    <title>Schiebedach</title>
+                </rect>
+                <text id="sunroof-percent" x="50" y="65" text-anchor="middle" dominant-baseline="central"></text>
+                <g id="tpms-indicator">
+                    <g id="tpms-VL" class="tpms-tire">
+                        <title>Vorne links</title>
+                        <circle cx="20" cy="35" r="8" />
+                        <text x="20" y="35">--</text>
+                    </g>
+                    <g id="tpms-VR" class="tpms-tire">
+                        <title>Vorne rechts</title>
+                        <circle cx="80" cy="35" r="8" />
+                        <text x="80" y="35">--</text>
+                    </g>
+                    <g id="tpms-HL" class="tpms-tire">
+                        <title>Hinten links</title>
+                        <circle cx="20" cy="170" r="8" />
+                        <text x="20" y="170">--</text>
+                    </g>
+                    <g id="tpms-HR" class="tpms-tire">
+                        <title>Hinten rechts</title>
+                        <circle cx="80" cy="170" r="8" />
+                        <text x="80" y="170">--</text>
+                    </g>
+                </g>
+                <rect id="charge-port" class="part-closed" x="15" y="150" width="8" height="8" rx="1" ry="1">
+                    <title>Ladeanschluss</title>
+                </rect>
+                <path id="charge-cable" d="M15 154 q -5 5 -10 10 q 5 5 10 10 q -5 5 -10 10 q 5 5 10 10" />
+            </svg>
+        </div>
+    </div>
+    <div id="offline-msg"></div>
+    {% if config.get('phone_number') and config.get('sms_enabled', True) %}
+    <div id="sms-form" style="display:none;">
+        <input id="sms-name" type="text" placeholder="Ihr Name">
+        <input id="sms-text" type="text" maxlength="160" placeholder="Nachricht">
+        <button id="sms-send" type="button">Nachricht an Fahrer senden</button>
+        <span id="sms-status"></span>
+    </div>
+    {% endif %}
+    <div id="loading-msg">Daten werden geladen...</div>
+    <div id="v2l-infos"></div>
+    <div id="charging-info"></div>
+    <div id="nav-bar"></div>
+    <div id="media-player"></div>
+    <div id="park-since"></div>
+    </div>
+
+    <footer class="app-version">
+        <span id="vehicle-state"></span>
+        <span id="client-count"></span>
+        <span>Tesla-Dashboard V{{ version }} - © {{ year }} Erik Schauer, do1ffe@darc.de</span>
+        <span id="data-age"></span>
+    </footer>
+
+    <script>
+        window.APP_VERSION = "{{ version }}";
+    </script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
