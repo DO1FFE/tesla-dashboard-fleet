@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Tesla Dashboard zur Anzeige aktueller Fahrzeugdaten">
+    <meta name="keywords" content="Tesla, Dashboard, Fahrzeugdaten, Statistik, Karte, Elektroauto, Ladung, Stromverbrauch, Standort, Routenplanung, Fahrzeugstatus, Kilometerstand, Trip, Tesla Model S, Model 3, Model X, Model Y">
+    <title>Fahrtverlauf</title>
+    <script src="/static/js/jquery.min.js"></script>
+    <link rel="stylesheet" href="/static/css/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+    {% include 'analytics.html' %}
+    <script src="/static/js/leaflet.js"></script>
+    <script src="/static/js/leaflet.rotatedMarker.js"></script>
+    <style>
+        html, body {
+            height: auto;
+            margin: 0;
+        }
+        #map {
+            height: 75vh;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fahrtverlauf</h1>
+    {% set show_dash = config.get('menu-dashboard', True) %}
+    {% set show_stat = config.get('menu-statistik', True) %}
+    {% set show_hist = config.get('menu-history', True) %}
+    {% if config.get('page-menu', True) and (show_dash or show_stat or show_hist) %}
+    <nav id="page-menu">
+        {% if show_dash %}<a class="menu-button" href="/">Dashboard</a>{% endif %}
+        {% if show_stat %}<a class="menu-button" href="/statistik">Statistik</a>{% endif %}
+        {% if show_hist %}<a class="menu-button" href="/history">History</a>{% endif %}
+    </nav>
+    {% endif %}
+    <form id="trip-form" method="get" action="/history">
+        <label for="file">Fahrt auswählen:</label>
+        <select id="file" name="file" onchange="document.getElementById('trip-form').submit();">
+            <optgroup label="Tage">
+            {% for f in files %}
+            <option value="{{ f }}" {% if f == selected %}selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+            </optgroup>
+            {% if weeks %}
+            <optgroup label="Wochen">
+            {% for w in weeks %}
+            <option value="week:{{ w }}" {% if ('week:' ~ w) == selected %}selected{% endif %}>{{ w }}</option>
+            {% endfor %}
+            </optgroup>
+            {% endif %}
+            {% if months %}
+            <optgroup label="Monate">
+            {% for m in months %}
+            <option value="month:{{ m }}" {% if ('month:' ~ m) == selected %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+            </optgroup>
+            {% endif %}
+        </select>
+    </form>
+    <div id="map">
+        <div id="slider-container">
+            <div id="slider-row">
+                <button id="play-btn" type="button">Play</button>
+                <button id="stop-btn" type="button">Stop</button>
+                <select id="speed-select">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="4">4x</option>
+                    <option value="8">8x</option>
+                    <option value="16">16x</option>
+                </select>
+                <input type="range" id="point-slider" min="0" max="0" value="0" step="1">
+            </div>
+            <div id="point-info"></div>
+        </div>
+    </div>
+    {% if weekly %}
+    <h2>Wöchentliche Zusammenfassung</h2>
+    <table>
+        <tr><th>Woche</th><th>Gefahrene km</th></tr>
+        {% for wk, km in weekly|dictsort %}
+        <tr><td>{{ wk }}</td><td>{{ '%.2f'|format(km) }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+    {% if monthly %}
+    <h2>Monatliche Zusammenfassung</h2>
+    <table>
+        <tr><th>Monat</th><th>Gefahrene km</th></tr>
+        {% for mo, km in monthly|dictsort %}
+        <tr><td>{{ mo }}</td><td>{{ '%.2f'|format(km) }}</td></tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+    <script>
+        var tripPath = {{ path|tojson }};
+        var tripHeading = {{ heading|tojson }};
+    </script>
+    <script src="/static/js/history.js"></script>
+</body>
+</html>
