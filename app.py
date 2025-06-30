@@ -1556,6 +1556,36 @@ def api_occupant():
     return jsonify({"present": occupant_present})
 
 
+def _send_whatsapp(phone, message, api_key, base_url, sender, template, lang):
+    """Send a WhatsApp template message via Infobip."""
+    if not base_url.startswith("http"):
+        base_url = "https://" + base_url
+    url = base_url.rstrip("/") + "/whatsapp/1/message/template"
+    resp = requests.post(
+        url,
+        json={
+            "messages": [
+                {
+                    "from": sender,
+                    "to": phone,
+                    "content": {
+                        "templateName": template,
+                        "templateData": {"body": {"placeholders": [message]}},
+                        "language": lang,
+                    },
+                }
+            ]
+        },
+        headers={
+            "Authorization": f"App {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        timeout=10,
+    )
+    return resp
+
+
 @app.route("/api/sms", methods=["POST"])
 def api_sms():
     """Send a short text message using the configured phone number."""
@@ -1565,17 +1595,19 @@ def api_sms():
     phone = cfg.get("phone_number")
     api_key = cfg.get("infobip_api_key")
     base_url = cfg.get("infobip_base_url", "https://api.infobip.com")
+    wa_from = cfg.get("whatsapp_from")
+    wa_template = cfg.get("whatsapp_template")
+    wa_lang = cfg.get("whatsapp_lang", "de")
     if not phone:
         return jsonify({"success": False, "error": "No phone number configured"}), 400
     if not api_key:
         return jsonify({"success": False, "error": "No API key configured"}), 400
     drive_only = cfg.get("sms_drive_only", True)
-    if drive_only and last_shift_state in (None, "P"):
-        grace = 0
-        if park_start_ms is not None:
-            grace = int(time.time() * 1000) - park_start_ms
-        if grace >= 600000 or park_start_ms is None:
-            return jsonify({"success": False, "error": "Vehicle is not driving"}), 400
+    parked = last_shift_state in (None, "P")
+    grace = 0
+    if park_start_ms is not None:
+        grace = int(time.time() * 1000) - park_start_ms
+    use_whatsapp = drive_only and parked and (grace >= 600000 or park_start_ms is None)
     data = request.get_json(silent=True) or {}
     message = data.get("message", "").strip()
     name = data.get("name", "").strip()
@@ -1588,10 +1620,26 @@ def api_sms():
     try:
         if not base_url.startswith("http"):
             base_url = "https://" + base_url
-        url = base_url.rstrip("/") + "/sms/2/text/advanced"
-        resp = requests.post(
-            url,
-            json={
+        if use_whatsapp and wa_from and wa_template:
+            url = base_url.rstrip("/") + "/whatsapp/1/message/template"
+            payload = {
+                "messages": [
+                    {
+                        "from": wa_from,
+                        "to": phone,
+                        "content": {
+                            "templateName": wa_template,
+                            "templateData": {"body": {"placeholders": [message]}},
+                            "language": wa_lang,
+                        },
+                    }
+                ]
+            }
+        else:
+            if drive_only and use_whatsapp and not (wa_from and wa_template):
+                return jsonify({"success": False, "error": "Vehicle is not driving"}), 400
+            url = base_url.rstrip("/") + "/sms/2/text/advanced"
+            payload = {
                 "messages": [
                     {
                         "destinations": [{"to": phone}],
@@ -1599,7 +1647,10 @@ def api_sms():
                         "text": message,
                     }
                 ]
-            },
+            }
+        resp = requests.post(
+            url,
+            json=payload,
             headers={
                 "Authorization": f"App {api_key}",
                 "Content-Type": "application/json",
@@ -1634,6 +1685,9 @@ def config_page():
         phone_number = request.form.get("phone_number", "").strip()
         infobip_api_key = request.form.get("infobip_api_key", "").strip()
         infobip_base_url = request.form.get("infobip_base_url", "").strip()
+        whatsapp_from = request.form.get("whatsapp_from", "").strip()
+        whatsapp_template = request.form.get("whatsapp_template", "").strip()
+        whatsapp_lang = request.form.get("whatsapp_lang", "").strip()
         sms_enabled = "sms_enabled" in request.form
         sms_drive_only = "sms_drive_only" in request.form
         api_interval = request.form.get("api_interval", "").strip()
@@ -1675,6 +1729,18 @@ def config_page():
             cfg["infobip_base_url"] = infobip_base_url
         elif "infobip_base_url" in cfg:
             cfg.pop("infobip_base_url")
+        if whatsapp_from:
+            cfg["whatsapp_from"] = whatsapp_from
+        elif "whatsapp_from" in cfg:
+            cfg.pop("whatsapp_from")
+        if whatsapp_template:
+            cfg["whatsapp_template"] = whatsapp_template
+        elif "whatsapp_template" in cfg:
+            cfg.pop("whatsapp_template")
+        if whatsapp_lang:
+            cfg["whatsapp_lang"] = whatsapp_lang
+        elif "whatsapp_lang" in cfg:
+            cfg.pop("whatsapp_lang")
         cfg["sms_enabled"] = sms_enabled
         cfg["sms_drive_only"] = sms_drive_only
         if api_interval.isdigit():
